@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: saakshi-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-saakshi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-saakshi_secure_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-saakshi_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-saakshi} -d ${POSTGRES_DB:-saakshi_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - saakshi-internal
+
+  redis:
+    image: redis:7-alpine
+    container_name: saakshi-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - saakshi-internal
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: saakshi-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-saakshi}:${POSTGRES_PASSWORD:-saakshi_secure_pass}@postgres:5432/${POSTGRES_DB:-saakshi_db}
+      - REDIS_URL=redis://redis:6379/0
+      - ENVIRONMENT=production
+      - AIR_GAPPED_MODE=true
+    volumes:
+      - evidence_vault:/data/evidence:ro
+      - case_storage:/data/cases
+      - custody_vault:/data/custody
+    ports:
+      - "8000:8000"
+    networks:
+      - saakshi-internal
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: saakshi-worker
+    command: ["python", "-m", "app.workers.tasks"]
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-saakshi}:${POSTGRES_PASSWORD:-saakshi_secure_pass}@postgres:5432/${POSTGRES_DB:-saakshi_db}
+      - REDIS_URL=redis://redis:6379/0
+      - AIR_GAPPED_MODE=true
+    volumes:
+      - evidence_vault:/data/evidence:ro
+      - case_storage:/data/cases
+      - custody_vault:/data/custody
+    networks:
+      - saakshi-internal
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: saakshi-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    networks:
+      - saakshi-internal
+
+volumes:
+  postgres_data:
+  redis_data:
+  evidence_vault:
+  case_storage:
+  custody_vault:
+
+networks:
+  saakshi-internal:
+    driver: bridge
+    internal: true
