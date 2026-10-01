@@ -1,0 +1,30 @@
+vendor_id: "cpplus"
+vendor_name: "CP PLUS"
+status: "placeholder"
+supported_models:
+  - "TODO: Pending lab characterization"
+firmware_versions:
+  - "TODO: Pending lab characterization"
+identification_signatures: []
+volume_layout:
+  sector_size_bytes: 512
+  cluster_size_bytes: null
+  superblock_offset: null
+  partition_scheme: "TODO"
+index_structure:
+  index_type: "TODO"
+  entry_size_bytes: null
+  timestamp_encoding: "TODO"
+  channel_map_strategy: "TODO"
+container_type:
+  stream_format: "TODO"
+  frame_header_magic: null
+timestamp_fields:
+  epoch_format: "TODO"
+  resolution: "TODO"
+  timezone_assumption: "UTC"
+notes: "Placeholder profile skeleton. Orange series and Cosmic series parameters to be extracted."
+todo_fields:
+  - "volume_layout.partition_scheme"
+  - "index_structure.index_type"
+  - "container_type.stream_format"
