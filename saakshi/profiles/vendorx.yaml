@@ -1,0 +1,38 @@
+name: VendorX
+status: implemented
+vendor: VendorX Corporation
+signature:
+  magic: "VENDORX_DVR\x00"
+  offset: 0
+  length: 12
+header:
+  size: 512
+  byte_order: little
+  fields:
+    magic: {offset: 0, size: 12, type: string}
+    version: {offset: 12, size: 4, type: uint32}
+    num_channels: {offset: 16, size: 2, type: uint16}
+    num_index_entries: {offset: 18, size: 4, type: uint32}
+    index_table_offset: {offset: 22, size: 8, type: uint64}
+    data_start_offset: {offset: 30, size: 8, type: uint64}
+    clock_offset_seconds: {offset: 38, size: 4, type: int32}
+index_entry:
+  size: 64
+  fields:
+    channel_id: {offset: 0, size: 1, type: uint8}
+    flags: {offset: 1, size: 1, type: uint8}
+    start_timestamp: {offset: 4, size: 4, type: uint32}
+    duration_ms: {offset: 8, size: 4, type: uint32}
+    data_offset: {offset: 12, size: 8, type: uint64}
+    data_length: {offset: 20, size: 8, type: uint64}
+    frame_width: {offset: 28, size: 2, type: uint16}
+    frame_height: {offset: 30, size: 2, type: uint16}
+    fps: {offset: 32, size: 1, type: uint8}
+    codec: {offset: 33, size: 1, type: uint8}
+codec_map:
+  0x01: h264
+  0x02: h265
+timestamp:
+  epoch: "2024-01-01T00:00:00Z"
+  unit: seconds
+  has_clock_offset: true
