@@ -1,0 +1,10 @@
+name: Bosch
+status: placeholder
+vendor: Bosch
+description: "Placeholder profile. Not yet reverse-engineered."
+signature:
+  magic: null
+  offset: 0
+  length: 0
+header: null
+index_entry: null
