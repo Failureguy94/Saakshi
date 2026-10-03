@@ -1,0 +1,7 @@
+name: Generic
+status: implemented
+vendor: Unknown
+description: Fallback profile for unrecognized formats. Uses NAL carving only.
+signature: null
+header: null
+index_entry: null
