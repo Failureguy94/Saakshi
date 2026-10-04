@@ -10,4 +10,5 @@
 | Analytics | Implemented | OpenCV motion detection |
 | Custody | Implemented | SQLite Hash Chain + Merkle Tree |
 | Reporting | Implemented | PDF via ReportLab |
-| UI | Implemented | Streamlit App |
+| API | Implemented | FastAPI endpoints for all modules and SSE stream |
+| UI | Implemented | Vite + React + Tailwind polished dark theme app |
