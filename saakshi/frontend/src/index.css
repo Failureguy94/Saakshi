@@ -2,13 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  color-scheme: dark;
+@layer base {
+  body {
+    @apply bg-bg text-text;
+  }
 }
 
-body {
-  margin: 0;
-  background-color: #020617;
-  color: #f8fafc;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+/* Custom Scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-border rounded-full hover:bg-muted/50 transition-colors;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
