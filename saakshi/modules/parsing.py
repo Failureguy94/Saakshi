@@ -11,8 +11,8 @@ def parse_vendorx(img_path):
         # Skip header
         f.seek(512)
         
-        # Read index table (5120 bytes max, 512 per entry)
-        index_data = f.read(5120)
+        # Read index table (10240 bytes max, 512 per entry)
+        index_data = f.read(10240)
         
     count = 0
     for i in range(0, len(index_data), 512):
@@ -24,15 +24,25 @@ def parse_vendorx(img_path):
             channel, segment, offset, length = struct.unpack("<IIQI", entry[:20])
             if channel == 0:
                 continue
-            timestamp = entry[20:].decode('utf-8', errors='ignore').strip('\x00')
+            dvr_time = entry[20:].decode('utf-8', errors='ignore').strip('\x00')
+            
+            with open(img_path, "rb") as mf:
+                mf.seek(offset)
+                segh_data = mf.read(32)
+                if segh_data.startswith(b"SEGH"):
+                    _, _, _, camera_epoch, _ = struct.unpack("<4sHHQI", segh_data[:20])
+                    import time
+                    camera_time = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(camera_epoch))
+                else:
+                    camera_time = dvr_time
             
             c.execute(
-                "INSERT INTO segments (channel, offset, length, timestamp, is_recovered, confidence) VALUES (?, ?, ?, ?, ?, ?)",
-                (channel, offset, length, timestamp, False, 1.0)
+                "INSERT INTO segments (channel, offset, length, source, confidence, dvr_time, camera_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (channel, offset, length, "indexed", 1.0, dvr_time, camera_time)
             )
             count += 1
-        except Exception:
-            pass
+        except Exception as e:
+            print("Parse error:", e)
             
     conn.commit()
     conn.close()
