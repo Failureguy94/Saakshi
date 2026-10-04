@@ -18,7 +18,8 @@ def init_db():
             timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
             stage TEXT,
             description TEXT,
-            data_hash TEXT,
+            evidence_hash TEXT,
+            entry_hash TEXT,
             prev_hash TEXT
         )
     ''')
@@ -28,9 +29,11 @@ def init_db():
             channel INTEGER,
             offset INTEGER,
             length INTEGER,
-            timestamp TEXT,
-            is_recovered BOOLEAN,
+            source TEXT,
             confidence REAL,
+            dvr_time TEXT,
+            camera_time TEXT,
+            normalized_time TEXT,
             file_path TEXT,
             file_hash TEXT
         )
@@ -40,8 +43,10 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             segment_id INTEGER,
             channel INTEGER,
-            timestamp TEXT,
-            frame_index INTEGER
+            start_time TEXT,
+            end_time TEXT,
+            peak_area REAL,
+            thumbnail_path TEXT
         )
     ''')
     conn.commit()
