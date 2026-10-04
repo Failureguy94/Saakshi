@@ -13,7 +13,7 @@ from saakshi.modules.recovery import extract_and_carve
 from saakshi.modules.timeline import analyze_timeline
 from saakshi.modules.analytics import detect_motion
 from saakshi.modules.reporting import generate_report
-from saakshi.modules.custody import verify_chain
+from saakshi.modules.custody import verify_chain, create_manifest, tamper_clip_copy, verify_manifest, restore_clip_copy
 
 def run_all():
     print("Initializing Database...")
@@ -54,7 +54,9 @@ def run_all():
         
     try:
         offsets = analyze_timeline()
-        print(f"[PASS] Timeline: Computed offset +{offsets[0]['offset_seconds']}s")
+        first_ch = list(offsets['channels'].keys())[0]
+        off_sec = offsets['channels'][first_ch]['offset_seconds']
+        print(f"[PASS] Timeline: Computed offset +{off_sec}s")
     except Exception as e:
         print(f"[FAIL] Timeline: {e}")
         
@@ -65,19 +67,32 @@ def run_all():
         print(f"[FAIL] Analytics: {e}")
         
     try:
+        chain_ok, err_idx = verify_chain()
+        if chain_ok:
+            print("[PASS] Custody: Chain verified intact")
+        else:
+            print(f"[FAIL] Custody: Chain verification failed at index {err_idx}")
+            
+        root = create_manifest(img_path)
+        print(f"[PASS] Custody: Merkle root {root}")
+        
+        tampered_path = tamper_clip_copy(1)
+        if tampered_path:
+            ok, path, exp, act = verify_manifest()
+            if not ok:
+                print(f"[PASS] Custody: Tamper detected in {path}")
+            else:
+                print(f"[FAIL] Custody: Tamper NOT detected")
+            restore_clip_copy(1)
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        print(f"[FAIL] Custody: {e}")
+        
+    try:
         pdf_path = generate_report()
         print(f"[PASS] Reporting: Report saved to {pdf_path}")
     except Exception as e:
         print(f"[FAIL] Reporting: {e}")
-        
-    try:
-        chain_ok = verify_chain()
-        if chain_ok:
-            print("[PASS] Custody: Chain verified intact")
-        else:
-            print("[FAIL] Custody: Chain verification failed")
-    except Exception as e:
-        print(f"[FAIL] Custody: {e}")
 
 if __name__ == "__main__":
     run_all()
