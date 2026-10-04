@@ -1,4 +1,4 @@
-.PHONY: init demo ui clean
+.PHONY: init demo ui clean start reset
 
 init:
 	mkdir -p out
@@ -13,3 +13,9 @@ ui:
 
 clean:
 	rm -rf out/*
+
+start:
+	.venv/bin/python start_demo.py
+
+reset: clean
+	.venv/bin/python scripts/make_synthetic_dvr.py
