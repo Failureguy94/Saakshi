@@ -5,100 +5,94 @@ import imageio_ffmpeg
 from saakshi.db import get_db
 from saakshi.modules.custody import append_custody
 
+import time
+import struct
+from saakshi.engine.nal_carver import default_nal_carver, group_into_gops
+from saakshi.engine.gop_repair import repair_gops
+
 ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
 
-def extract_and_carve(img_path, out_dir="out"):
+def extract_and_carve(img_path, out_dir="out", progress_cb=None):
     os.makedirs(out_dir, exist_ok=True)
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT * FROM segments")
-    indexed = c.fetchall()
+    c.execute("SELECT id, channel, offset, length FROM segments WHERE source='indexed'")
+    indexed = {row["offset"]: dict(row) for row in c.fetchall()}
     
-    # 1. Extract Indexed
-    count_indexed = 0
     with open(img_path, "rb") as f:
-        for seg in indexed:
-            f.seek(seg["offset"])
-            data = f.read(seg["length"])
-            raw_path = f"{out_dir}/ch{seg['channel']}_seg{seg['id']}_idx.h264"
-            with open(raw_path, "wb") as rf:
-                rf.write(data)
-            
-            mp4_path = f"{out_dir}/ch{seg['channel']}_seg{seg['id']}_idx.mp4"
-            subprocess.run([ffmpeg_exe, "-y", "-i", raw_path, "-c", "copy", mp4_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            
-            with open(mp4_path, "rb") as mf:
-                file_hash = hashlib.sha256(mf.read()).hexdigest()
-                
-            c.execute("UPDATE segments SET file_path=?, file_hash=? WHERE id=?", (mp4_path, file_hash, seg["id"]))
-            count_indexed += 1
-            
-    # 2. Carve Unindexed (naive NAL carving for this demo)
-    # The index used 5120 bytes for index table, starting at 512.
-    # Video data starts at 5632.
-    c.execute("SELECT offset, length FROM segments ORDER BY offset")
-    known_regions = []
-    for row in c.fetchall():
-        known_regions.append((row["offset"], row["offset"] + row["length"]))
-        
-    def is_unallocated(offset):
-        for start, end in known_regions:
-            if start <= offset < end:
-                return False
-        return True
-
-    carved = 0
-    with open(img_path, "rb") as f:
-        f.seek(5632)
         data = f.read()
     
-    # Very simple carving: look for NAL 00 00 00 01
-    nal_sig = b'\x00\x00\x00\x01'
+    # Find all SEGH headers
+    segh_sig = b"SEGH"
     idx = 0
+    segments_found = []
     while idx < len(data):
-        idx = data.find(nal_sig, idx)
+        idx = data.find(segh_sig, idx)
         if idx == -1:
             break
         
-        abs_offset = 5632 + idx
-        if is_unallocated(abs_offset):
-            # Found start of a deleted segment
-            # Find next large block of unallocated NALs, or just grab a chunk for demo
-            # In our synthetic data, segments are contiguous.
-            # Let's find where this unallocated block ends.
-            end_idx = len(data)
-            for start, end in known_regions:
-                if start > abs_offset:
-                    end_idx = min(end_idx, start - 5632)
+        # Read header
+        if idx + 32 <= len(data):
+            _, ch, seg_num, camera_epoch, duration = struct.unpack("<4sHHQI", data[idx:idx+20])
+            camera_time = time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(camera_epoch))
+            segments_found.append({
+                "offset": idx,
+                "channel": ch,
+                "camera_time": camera_time
+            })
+        idx += 32
+        
+    count_indexed = 0
+    carved = 0
+    
+    total_segs = len(segments_found)
+    for i, sf in enumerate(segments_found):
+        if progress_cb:
+            progress_cb(i, total_segs, f"Carving segment {i}/{total_segs}")
             
-            seg_data = data[idx:end_idx]
-            
-            if len(seg_data) > 500: # reasonably large to be video
-                # Save it
-                carved += 1
-                c.execute("INSERT INTO segments (channel, offset, length, is_recovered, confidence) VALUES (?, ?, ?, ?, ?)",
-                          (0, abs_offset, len(seg_data), True, 0.8))
-                seg_id = c.lastrowid
-                
-                raw_path = f"{out_dir}/recovered_seg{seg_id}.h264"
-                with open(raw_path, "wb") as rf:
-                    rf.write(seg_data)
-                
-                mp4_path = f"{out_dir}/recovered_seg{seg_id}.mp4"
-                subprocess.run([ffmpeg_exe, "-y", "-i", raw_path, "-c", "copy", mp4_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                
-                with open(mp4_path, "rb") as mf:
-                    file_hash = hashlib.sha256(mf.read()).hexdigest()
-                    
-                c.execute("UPDATE segments SET file_path=?, file_hash=? WHERE id=?", (mp4_path, file_hash, seg_id))
-            
-            idx = end_idx
+        start_offset = sf["offset"]
+        end_offset = segments_found[i+1]["offset"] if i + 1 < len(segments_found) else len(data)
+        
+        is_indexed = start_offset in indexed
+        
+        if is_indexed:
+            # We already have offset/length from index
+            idx_seg = indexed[start_offset]
+            length = idx_seg["length"]
+            db_id = idx_seg["id"]
+            ch = idx_seg["channel"]
+            prefix = f"ch{ch}_seg{db_id}_idx"
+            count_indexed += 1
+            source = "indexed"
         else:
-            idx += 1
-
+            length = end_offset - start_offset
+            ch = sf["channel"]
+            
+            c.execute("INSERT INTO segments (channel, offset, length, source, confidence, dvr_time, camera_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                      (ch, start_offset, length, "recovered-deleted", 0.8, sf["camera_time"], sf["camera_time"])) # use camera_time for dvr_time fallback
+            db_id = c.lastrowid
+            prefix = f"ch{ch}_seg{db_id}_rec"
+            carved += 1
+            source = "recovered-deleted"
+            
+        raw_path = f"{out_dir}/{prefix}.h264"
+        with open(raw_path, "wb") as rf:
+            rf.write(data[start_offset+32:start_offset+length])
+            
+        mp4_path = f"{out_dir}/{prefix}.mp4"
+        subprocess.run([ffmpeg_exe, "-y", "-i", raw_path, "-c", "copy", mp4_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        with open(mp4_path, "rb") as mf:
+            file_hash = hashlib.sha256(mf.read()).hexdigest()
+            
+        c.execute("UPDATE segments SET file_path=?, file_hash=? WHERE id=?", (mp4_path, file_hash, db_id))
+        
     conn.commit()
     conn.close()
     
+    if progress_cb:
+        progress_cb(total_segs, total_segs, "Carving complete")
+        
     append_custody("Recovery", f"Recovered {count_indexed} indexed, {carved} deleted segments")
     return count_indexed, carved
 
