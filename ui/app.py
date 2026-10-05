@@ -7,8 +7,15 @@ import sqlite3
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from saakshi.db import get_db
-from saakshi.modules.custody import compute_merkle_root, verify_chain
+from saakshi.modules.custody import verify_chain
 from saakshi.modules.reporting import generate_report
+import json
+
+def compute_merkle_root():
+    if not os.path.exists("out/manifest.json"):
+        return "N/A"
+    with open("out/manifest.json", "r") as f:
+        return json.load(f).get("merkle_root", "N/A")
 
 st.set_page_config(page_title="Saakshi Forensic Platform", layout="wide", initial_sidebar_state="expanded")
 st.title("Saakshi Forensic Platform")
@@ -68,7 +75,8 @@ with tab4:
         st.write(f"**Merkle Root:** `{compute_merkle_root()}`")
         
         if st.button("Verify Chain"):
-            if verify_chain():
+            is_valid, _ = verify_chain()
+            if is_valid:
                 st.success("Cryptographic chain verified and intact.")
             else:
                 st.error("Chain verification failed! Tampering detected.")
