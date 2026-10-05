@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 import shutil
 import binascii
 import traceback
@@ -216,7 +217,7 @@ def do_restore(req: TamperReq):
 
 @app.post("/api/reset")
 def do_reset():
-    os.system("rm -rf out/* && python scripts/make_synthetic_dvr.py")
+    os.system(f"rm -rf out/* && {sys.executable} scripts/make_synthetic_dvr.py")
     return {"reset": True}
 
 if __name__ == "__main__":
